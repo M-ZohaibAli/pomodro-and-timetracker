@@ -1,0 +1,58 @@
+import { db } from "@/db";
+import { tasksTable } from "@/db/schema";
+import { desc, eq } from "drizzle-orm";
+import { NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    if (!db) return NextResponse.json({ success: false, tasks: [] });
+    const tasks = await db.select().from(tasksTable).orderBy(desc(tasksTable.createdAt));
+    return NextResponse.json({ success: true, tasks });
+  } catch (err) {
+    return NextResponse.json({ success: false, error: String(err) }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    if (!db) return NextResponse.json({ success: false, error: "No database configured" });
+    const body = await req.json();
+    const { id, title, project, estimatedPomodoros, completedPomodoros, totalFocusSeconds, status } = body;
+
+    if (!id || !title) {
+      return NextResponse.json({ success: false, error: "id and title are required" }, { status: 400 });
+    }
+
+    const existing = await db.select().from(tasksTable).where(eq(tasksTable.id, id));
+
+    if (existing.length > 0) {
+      await db
+        .update(tasksTable)
+        .set({
+          title,
+          project: project || "General",
+          estimatedPomodoros: estimatedPomodoros ?? 1,
+          completedPomodoros: completedPomodoros ?? 0,
+          totalFocusSeconds: totalFocusSeconds ?? 0,
+          status: status || "active",
+        })
+        .where(eq(tasksTable.id, id));
+    } else {
+      await db.insert(tasksTable).values({
+        id,
+        title,
+        project: project || "General",
+        estimatedPomodoros: estimatedPomodoros ?? 1,
+        completedPomodoros: completedPomodoros ?? 0,
+        totalFocusSeconds: totalFocusSeconds ?? 0,
+        status: status || "active",
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ success: false, error: String(err) }, { status: 500 });
+  }
+}
